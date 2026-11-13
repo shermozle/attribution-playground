@@ -1,5 +1,5 @@
 import { PRODUCTS, CAMPAIGNS, SCENARIOS, makeJourney, buildDataset, costEvents, purchaseOutcomes, attributionWeights } from './model.js';
-import { RECIPES, SOURCES, notebookPrompt } from './guide.js';
+import { RECIPES, SOURCES, notebookPrompt, isValidRunId } from './guide.js';
 import { sendEvents } from './transport.js';
 
 const $ = id => document.getElementById(id);
@@ -16,6 +16,8 @@ if (!config || typeof config.key !== 'string' || !['US','EU'].includes(config.re
 let dataset = read('campaignlab.dataset.v2', { runId:'', events:[], accepted:{}, status:'' });
 if (!Array.isArray(dataset.events) || !dataset.accepted) dataset = {runId:'',events:[],accepted:{},status:''};
 let journey, shown = [], selectedIndex = 0, sending = false, toastTimer;
+const savedNotebookRun = read('campaignlab.notebookRun', '');
+$('existing-run-id').value = typeof savedNotebookRun === 'string' ? savedNotebookRun : '';
 const query = new URLSearchParams(location.search);
 const urlCampaign = query.has('utm_campaign') ? Object.fromEntries(Object.keys(CAMPAIGNS.google).map(k => [k, (query.get(k) || '').slice(0,200)])) : null;
 
@@ -104,7 +106,22 @@ function renderDataset() {
   $('expected-results').innerHTML=ready?`<div class="table-scroll"><table><thead><tr><th>Story</th><th>Visitors</th><th>Orders</th><th>Click items</th><th>View-only items</th><th>Unattributed items</th></tr></thead><tbody>${rows.join('')}</tbody></table></div><p class="micro-note">Run filter: <code>${escape(dataset.runId)}</code> · ${new Date(Math.min(...dataset.events.map(e=>e.time))).toLocaleDateString('en-AU')} – ${new Date(Math.max(...dataset.events.map(e=>e.time))).toLocaleDateString('en-AU')} · ${summary.items} purchased items. Item totals exceed orders when a basket has multiple products.</p>`:'Prepare a dataset to see its acceptance checks.';
   renderPrompt();
 }
-function renderPrompt(){const runId=dataset.runId||'[PREPARE A DATASET FIRST]';$('notebook-prompt').value=notebookPrompt({project:config.project,runId,events:dataset.events,expected:counts(dataset.events)});$('prompt-run').textContent=runId;}
+function currentNotebookRun(){return $('existing-run-id').value.trim() || dataset.runId;}
+function renderPrompt(){
+  const runId=currentNotebookRun();
+  const valid=isValidRunId(runId);
+  $('copy-prompt').disabled=!valid;
+  $('download-prompt').disabled=!valid;
+  $('prompt-run').textContent=valid?runId:'Select a run';
+  if(!valid){
+    $('notebook-status').textContent=runId?'Use a run ID containing letters, numbers, dots, underscores or hyphens (up to 120 characters).':'Prepare a dataset in Data studio, or enter the demo_run_id of data already sent to Amplitude.';
+    $('notebook-prompt').value='Select a run to generate a complete notebook prompt.';
+    return;
+  }
+  const events=dataset.events.filter(e=>e.event_properties.demo_run_id===runId);
+  $('notebook-status').textContent=events.length?'Using this locally prepared run. Send its events before asking Global Agent to analyse it.':'Using an existing run. Global Agent will discover its event dates and query its counts; no new data needs to be sent.';
+  $('notebook-prompt').value=notebookPrompt({project:config.project,runId,events,expected:events.length?counts(events):undefined});
+}
 function renderConnection(){const connected=!!config.key;$('connection-badge').innerHTML=`<i></i> ${connected?'Key saved · '+escape(config.region):'Preview mode'}`;$('connection-badge').classList.toggle('connected',connected);$('connect-open').textContent=connected?'Project settings ↗':'Connect project ↗';$('destination').textContent=connected?`Destination: ${config.region} data region${config.project?' · '+config.project:''}. API key saved; connection is verified only when events are accepted.`:'Connect a project API key to send.';$('project-name').value=config.project||'';renderDataset();}
 async function sendDataset(){
   if(sending||!dataset.events.length||!config.key)return;
@@ -142,5 +159,6 @@ $('connect-close').addEventListener('click',()=>$('connect-dialog').close());
 $('connection-form').addEventListener('submit',event=>{event.preventDefault();config.key=$('api-key').value.trim();config.region=$('region').value;save('campaignlab.connection.v2',config);$('connect-dialog').close();renderConnection();toast(storageAvailable?'Connection settings saved locally.':'Settings are available for this tab only.');});
 $('forget-key').addEventListener('click',()=>{config.key='';save('campaignlab.connection.v2',config);$('api-key').value='';$('connect-dialog').close();renderConnection();toast('Project key removed from this browser.');});
 $('project-name').addEventListener('input',()=>{config.project=$('project-name').value.slice(0,200);save('campaignlab.connection.v2',config);renderPrompt();});
-$('copy-prompt').addEventListener('click',()=>copy($('notebook-prompt').value));$('download-prompt').addEventListener('click',()=>download(`notebook-${dataset.runId||'template'}.txt`,$('notebook-prompt').value,'text/plain'));
+$('existing-run-id').addEventListener('input',()=>{save('campaignlab.notebookRun',$('existing-run-id').value.trim());renderPrompt();});
+$('copy-prompt').addEventListener('click',()=>{if(isValidRunId(currentNotebookRun()))copy($('notebook-prompt').value);});$('download-prompt').addEventListener('click',()=>{if(isValidRunId(currentNotebookRun()))download(`notebook-${currentNotebookRun()}.txt`,$('notebook-prompt').value,'text/plain');});
 initJourney();renderCredit();renderConnection();route();

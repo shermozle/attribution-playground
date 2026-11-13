@@ -20,9 +20,18 @@ export const RECIPES = [
   { title: 'Explain the persistence boundary', time: '06 · Compare', body: `<p>In Property lab, compare the purchase’s raw item field, profile snapshot and computed item context. Change 14 days to Session, then 30 days. The expired return should change only when its original signal is eligible.</p><p>Persistence is configured per property; attribution per metric. Original / Most recent fill forward. First known / Last known are session-only and can fill earlier events. These calculated fields don’t update profiles or appear in raw exports. The lab’s calculations are teaching examples, not queries against Amplitude.</p><p>For the legacy 14-day question, compare raw campaign touches with a persisted campaign under the same model and dates. Persistence can change which values enter an attribution window. Inspect the resulting Amplitude chart before making claims about repeated touches or credit.</p>` },
 ];
 
-export function notebookPrompt({ project, runId, events, expected }) {
-  const dates = events.length ? `${new Date(Math.min(...events.map(e=>e.time))).toISOString()} to ${new Date(Math.max(...events.map(e=>e.time))).toISOString()}` : 'No sample events prepared yet';
-  return `Create a NEW Amplitude notebook named "Campaign attribution lab — ${runId}" in project "${project || '[SELECT MY DEMO PROJECT]'}". Verify the selected project with me if ambiguous. Use only demo_run_id = "${runId}" and event times ${dates}; account for project timezone. These are synthetic demonstration events, not real business results.
+export const isValidRunId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value);
+
+export function notebookPrompt({ project, runId, events = [], expected }) {
+  if (!isValidRunId(runId)) throw new Error('Prepare a dataset or enter an existing run ID before creating a prompt.');
+  const runEvents = events.filter(e => e.event_properties?.demo_run_id === runId);
+  const dates = runEvents.length
+    ? `The locally prepared event-time range is ${new Date(Math.min(...runEvents.map(e=>e.time))).toISOString()} to ${new Date(Math.max(...runEvents.map(e=>e.time))).toISOString()}. Verify ingestion and include this entire range in the project timezone.`
+    : 'Event times are not available in this browser. Discover the earliest and latest event timestamps for this exact run across available history, then set chart dates to cover the entire run in the project timezone. Do not substitute ingestion time for event time. If exact timestamp discovery is unavailable, use a broad available-history range with the exact run filter and document the limitation; do not block notebook creation just because local dates are absent.';
+  const expectations = runEvents.length && expected
+    ? `Local expected outcome counts for this prepared dataset (14-day, Most recent, item-level; these are predictions to verify, not Amplitude query results): ${JSON.stringify(expected)}.`
+    : 'Expected counts are not supplied for this existing run. Query and report the actual results; missing local expectations do not mean zero events and are not a blocker. Do not infer counts from another run.';
+  return `Create a NEW Amplitude notebook named "Campaign attribution lab — ${runId}" ${project?.trim() ? `in project ${JSON.stringify(project.trim())}` : 'in the currently selected Amplitude project'}. Use only demo_run_id = "${runId}". This exact run is explicitly selected; do not ask for confirmation merely because it was entered manually. Verify project selection only if it is genuinely ambiguous. ${dates} These are synthetic demonstration events, not real business results.
 
 First inspect the available schema and data, then build and save supported charts and embed them in a teaching notebook. Do not invent chart links, persisted properties or query results. If a tool cannot configure something, add an explicit manual setup instruction and leave that section marked incomplete.
 
@@ -44,6 +53,6 @@ Notebook sections:
 7. Acceptance examples: two-item order retains separate sources; PHONE/BUDS exposure followed by CASE purchase is unattributed; a purchase 15 days later has no 14-day persisted source even when last_clicked_promo remains on its profile. Compare Session/14-day/30-day persistence separately from attribution lookback. Avoid whole-order revenue duplication in item breakdowns.
 8. Explain that attribution measures association and a holdout experiment is needed for incrementality. Finish with a presenter checklist and source links.
 
-Local expected outcome counts for this prepared dataset (14-day, Most recent, item-level; these are predictions to verify, not Amplitude query results): ${JSON.stringify(expected)}.
+${expectations}
 Data source marker: demo_source = attribution-playground. Filter demo_scenario where helpful. Source documentation: ${SOURCES.map(s=>s[1]).join('\n')}`;
 }

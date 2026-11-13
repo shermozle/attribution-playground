@@ -80,3 +80,23 @@ test('notebook prompt scopes exact run and names manual setup without claiming r
  assert.match(text,/demo_run_id = "one-run"/); assert.match(text,/manual setup/);assert.match(text,/predictions to verify/);
  assert.match(text,/2026-11-/);assert.doesNotMatch(text,/api_key/);
 });
+test('notebook prompt rejects missing and placeholder run IDs',()=>{
+ for(const runId of ['',undefined,'[PREPARE A DATASET FIRST]']){
+  assert.throws(()=>notebookPrompt({runId,events:[],expected:{purchases:0}}),/enter an existing run ID/);
+ }
+});
+test('existing-run prompt discovers dates and counts instead of exporting placeholders or zeros',()=>{
+ const text=notebookPrompt({project:'Campaign Lab (906764)',runId:'2026-11-13-c81533b9'});
+ assert.match(text,/demo_run_id = "2026-11-13-c81533b9"/);
+ assert.match(text,/Campaign Lab \(906764\)/);
+ assert.match(text,/Discover the earliest and latest event timestamps/);
+ assert.match(text,/Do not substitute ingestion time/);
+ assert.match(text,/Expected counts are not supplied/);
+ assert.doesNotMatch(text,/PREPARE A DATASET FIRST|SELECT MY DEMO PROJECT|"purchases":0|undefined/);
+});
+test('an existing run never inherits another dataset dates or expected counts',()=>{
+ const text=notebookPrompt({runId:'existing-run',events:makeJourney('view','different-run',0,now),expected:{purchases:999}});
+ assert.match(text,/currently selected Amplitude project/);
+ assert.match(text,/Expected counts are not supplied/);
+ assert.doesNotMatch(text,/999|2026-11-13T/);
+});
