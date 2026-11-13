@@ -9,9 +9,11 @@ let storageAvailable = true;
 function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
 function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { storageAvailable = false; toast('Browser storage is unavailable or full. Keep this tab open; changes are only in memory.'); } }
 const newId = () => `${new Date().toISOString().slice(0,10)}-${crypto.randomUUID().slice(0,8)}`;
-let config = read('campaignlab.connection', { key:'', region:'US', project:'' });
+// Keep connection credentials, but start with generic project labels and sample data.
+const previousConnection = read('campaignlab.connection', {});
+let config = read('campaignlab.connection.v2', { key:previousConnection?.key || '', region:previousConnection?.region || 'US', project:'' });
 if (!config || typeof config.key !== 'string' || !['US','EU'].includes(config.region)) config = {key:'',region:'US',project:''};
-let dataset = read('campaignlab.dataset', { runId:'', events:[], accepted:{}, status:'' });
+let dataset = read('campaignlab.dataset.v2', { runId:'', events:[], accepted:{}, status:'' });
 if (!Array.isArray(dataset.events) || !dataset.accepted) dataset = {runId:'',events:[],accepted:{},status:''};
 let journey, shown = [], selectedIndex = 0, sending = false, toastTimer;
 const query = new URLSearchParams(location.search);
@@ -85,7 +87,7 @@ function renderCredit() {
 }
 
 function counts(events) {const outcomes=purchaseOutcomes(events);return {purchases:events.filter(e=>e.event_type==='Purchase').length,items:outcomes.length,clickThrough:outcomes.filter(o=>o.outcome==='Click-through').length,viewThroughOnly:outcomes.filter(o=>o.outcome==='View-through only').length,unattributed:outcomes.filter(o=>o.outcome==='Unattributed').length};}
-function persistDataset(){save('campaignlab.dataset',dataset);}
+function persistDataset(){save('campaignlab.dataset.v2',dataset);}
 function setDataset(events) {dataset={runId:events[0]?.event_properties.demo_run_id||'',events,accepted:{},status:'Prepared locally. Not sent.'};persistDataset();renderDataset();toast(`Prepared ${events.length} events. Review, then send when ready.`);}
 function renderDataset() {
   const ready=dataset.events.length>0;
@@ -137,8 +139,8 @@ $('send-data').addEventListener('click',sendDataset);$('export-data').addEventLi
 $('open-notebook').addEventListener('click',()=>location.hash='notebook');
 $('connect-open').addEventListener('click',()=>{$('api-key').value=config.key;$('region').value=config.region;$('connect-dialog').showModal();});
 $('connect-close').addEventListener('click',()=>$('connect-dialog').close());
-$('connection-form').addEventListener('submit',event=>{event.preventDefault();config.key=$('api-key').value.trim();config.region=$('region').value;save('campaignlab.connection',config);$('connect-dialog').close();renderConnection();toast(storageAvailable?'Connection settings saved locally.':'Settings are available for this tab only.');});
-$('forget-key').addEventListener('click',()=>{config.key='';save('campaignlab.connection',config);$('api-key').value='';$('connect-dialog').close();renderConnection();toast('Project key removed from this browser.');});
-$('project-name').addEventListener('input',()=>{config.project=$('project-name').value.slice(0,200);save('campaignlab.connection',config);renderPrompt();});
+$('connection-form').addEventListener('submit',event=>{event.preventDefault();config.key=$('api-key').value.trim();config.region=$('region').value;save('campaignlab.connection.v2',config);$('connect-dialog').close();renderConnection();toast(storageAvailable?'Connection settings saved locally.':'Settings are available for this tab only.');});
+$('forget-key').addEventListener('click',()=>{config.key='';save('campaignlab.connection.v2',config);$('api-key').value='';$('connect-dialog').close();renderConnection();toast('Project key removed from this browser.');});
+$('project-name').addEventListener('input',()=>{config.project=$('project-name').value.slice(0,200);save('campaignlab.connection.v2',config);renderPrompt();});
 $('copy-prompt').addEventListener('click',()=>copy($('notebook-prompt').value));$('download-prompt').addEventListener('click',()=>download(`notebook-${dataset.runId||'template'}.txt`,$('notebook-prompt').value,'text/plain'));
 initJourney();renderCredit();renderConnection();route();

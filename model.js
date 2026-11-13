@@ -30,7 +30,7 @@ function item(product, type) {
 export function makeJourney(scenario, runId, index = 0, end = Date.now() - 60000, campaignOverride) {
   if (!SCENARIOS[scenario]) throw new Error('Unknown scenario');
   const start = end - (scenario === 'expired' ? 15 * DAY : 2 * DAY) - 600000;
-  const userId = `telstra-demo-${runId}-${index}`;
+  const userId = `playground-demo-${runId}-${index}`;
   let sequence = 0;
   let profile = { customer_type: index % 2 ? 'Existing customer' : 'New customer', membership_tier: index % 2 ? 'Silver' : 'None' };
   const events = [];

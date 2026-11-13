@@ -22,7 +22,7 @@ export const RECIPES = [
 
 export function notebookPrompt({ project, runId, events, expected }) {
   const dates = events.length ? `${new Date(Math.min(...events.map(e=>e.time))).toISOString()} to ${new Date(Math.max(...events.map(e=>e.time))).toISOString()}` : 'No sample events prepared yet';
-  return `Create a NEW Amplitude notebook named "Campaign attribution lab — ${runId}" in project "${project || '[SELECT MY DEMO PROJECT]'}". Verify the selected project with me if ambiguous. Use only demo_run_id = "${runId}" and event times ${dates}; account for project timezone. These are synthetic demonstration events, not Telstra business results.
+  return `Create a NEW Amplitude notebook named "Campaign attribution lab — ${runId}" in project "${project || '[SELECT MY DEMO PROJECT]'}". Verify the selected project with me if ambiguous. Use only demo_run_id = "${runId}" and event times ${dates}; account for project timezone. These are synthetic demonstration events, not real business results.
 
 First inspect the available schema and data, then build and save supported charts and embed them in a teaching notebook. Do not invent chart links, persisted properties or query results. If a tool cannot configure something, add an explicit manual setup instruction and leave that section marked incomplete.
 
