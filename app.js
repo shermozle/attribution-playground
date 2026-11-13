@@ -1,6 +1,7 @@
 import { PRODUCTS, CAMPAIGNS, SCENARIOS, makeJourney, buildDataset, costEvents, purchaseOutcomes, attributionWeights } from './model.js';
 import { RECIPES, SOURCES, notebookPrompt, isValidRunId } from './guide.js';
 import { sendEvents } from './transport.js';
+import { completedRunRecord, rememberRun, runsForDestination } from './run-history.js';
 
 const $ = id => document.getElementById(id);
 const money = value => new Intl.NumberFormat('en-AU', { style:'currency', currency:'AUD', maximumFractionDigits:0 }).format(value);
@@ -18,6 +19,10 @@ if (!Array.isArray(dataset.events) || !dataset.accepted) dataset = {runId:'',eve
 let journey, shown = [], selectedIndex = 0, sending = false, toastTimer;
 const savedNotebookRun = read('campaignlab.notebookRun', '');
 $('existing-run-id').value = typeof savedNotebookRun === 'string' ? savedNotebookRun : '';
+let sentRuns = read('campaignlab.sentRuns', []);
+if (!Array.isArray(sentRuns)) sentRuns = [];
+let notebookSelection = read('campaignlab.notebookSelection', savedNotebookRun ? 'manual' : 'latest');
+let activeDestination = null, historyReady = false, historyRevision = 0;
 const query = new URLSearchParams(location.search);
 const urlCampaign = query.has('utm_campaign') ? Object.fromEntries(Object.keys(CAMPAIGNS.google).map(k => [k, (query.get(k) || '').slice(0,200)])) : null;
 
@@ -104,36 +109,82 @@ function renderDataset() {
   const rows=Object.entries(SCENARIOS).map(([id,s])=>{const events=dataset.events.filter(e=>e.event_properties.demo_scenario===id);const c=counts(events);return `<tr><td><strong>${s.title}</strong></td><td>${new Set(events.map(e=>e.user_id)).size}</td><td>${c.purchases}</td><td>${c.clickThrough}</td><td>${c.viewThroughOnly}</td><td>${c.unattributed}</td></tr>`;});
   $('expected-results').className=ready?'':'empty';
   $('expected-results').innerHTML=ready?`<div class="table-scroll"><table><thead><tr><th>Story</th><th>Visitors</th><th>Orders</th><th>Click items</th><th>View-only items</th><th>Unattributed items</th></tr></thead><tbody>${rows.join('')}</tbody></table></div><p class="micro-note">Run filter: <code>${escape(dataset.runId)}</code> · ${new Date(Math.min(...dataset.events.map(e=>e.time))).toLocaleDateString('en-AU')} – ${new Date(Math.max(...dataset.events.map(e=>e.time))).toLocaleDateString('en-AU')} · ${summary.items} purchased items. Item totals exceed orders when a basket has multiple products.</p>`:'Prepare a dataset to see its acceptance checks.';
-  renderPrompt();
+  renderRunChoices(); renderPrompt();
 }
-function currentNotebookRun(){return $('existing-run-id').value.trim() || dataset.runId;}
+async function destinationHash(region, key) {
+  const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(region+':'+key));
+  return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+async function refreshRunHistory(){
+  const revision = ++historyRevision;
+  historyReady = false; renderPrompt();
+  try {
+    const destination = config.key ? await destinationHash(config.region, config.key) : null;
+    if (revision !== historyRevision) return;
+    activeDestination = destination;
+    // Recover completed sends from older versions without displaying their raw payloads.
+    for (const saved of [read('campaignlab.dataset', null), dataset]) {
+      for (const target of Object.keys(saved?.accepted || {})) {
+        sentRuns = rememberRun(sentRuns, completedRunRecord(saved, target, {
+          region: target === destination ? config.region : 'Unknown region',
+          project: target === destination ? config.project : '',
+        }));
+      }
+    }
+    save('campaignlab.sentRuns', sentRuns);
+    historyReady = true; renderRunChoices(); renderPrompt();
+  } catch {
+    historyReady = true; activeDestination = config.key ? 'unavailable' : null;
+    renderRunChoices(); renderPrompt();
+    toast('Could not match saved runs to this connection. You can still enter an existing run ID.');
+  }
+}
+function renderRunChoices(){
+  const available = runsForDestination(sentRuns, activeDestination);
+  const savedOptions = available.map(r=>`<option value="${escape('sent:'+r.destination+':'+r.runId)}">${escape(r.runId)} · ${r.eventCount} events · ${escape(r.region || 'Unknown region')}${r.sentAt?' · '+escape(new Date(r.sentAt).toLocaleString('en-AU')):' · recovered send'}</option>`).join('');
+  $('notebook-run-choice').innerHTML=`<option value="latest">Last successfully sent run${available.length?' · '+escape(available[0].runId):' · none saved'}</option><option value="prepared" ${dataset.events.length?'':'disabled'}>Currently prepared dataset${dataset.runId?' · '+escape(dataset.runId):''}</option>${savedOptions?`<optgroup label="Sent from this browser">${savedOptions}</optgroup>`:''}<option value="manual">Enter an existing run ID…</option>`;
+  if (![...$('notebook-run-choice').options].some(o=>o.value===notebookSelection&&!o.disabled)) notebookSelection='latest';
+  $('notebook-run-choice').value=notebookSelection;
+  $('manual-run-fields').hidden=notebookSelection!=='manual';
+}
+function selectedNotebookContext(){
+  if (notebookSelection==='manual') return {runId:$('existing-run-id').value.trim(),events:[]};
+  if (notebookSelection==='prepared') return {runId:dataset.runId,events:dataset.events,expected:counts(dataset.events)};
+  const available=runsForDestination(sentRuns,activeDestination);
+  const record=notebookSelection==='latest'?available[0]:available.find(r=>'sent:'+r.destination+':'+r.runId===notebookSelection);
+  return record?{runId:record.runId,events:[],expected:record.expected,record}:{runId:'',events:[]};
+}
+function currentNotebookRun(){return selectedNotebookContext().runId;}
 function renderPrompt(){
-  const runId=currentNotebookRun();
-  const valid=isValidRunId(runId);
+  const context=selectedNotebookContext();
+  const {runId,events,record}=context;
+  const valid=historyReady&&isValidRunId(runId);
   $('copy-prompt').disabled=!valid;
   $('download-prompt').disabled=!valid;
   $('prompt-run').textContent=valid?runId:'Select a run';
   if(!valid){
-    $('notebook-status').textContent=runId?'Use a run ID containing letters, numbers, dots, underscores or hyphens (up to 120 characters).':'Prepare a dataset in Data studio, or enter the demo_run_id of data already sent to Amplitude.';
+    $('notebook-status').textContent=!historyReady?'Finding saved sends for this connection…':runId?'Use a run ID containing letters, numbers, dots, underscores or hyphens (up to 120 characters).':'No successful send is saved for this connection. Send a dataset, choose a prepared preview, or enter an existing run ID.';
     $('notebook-prompt').value='Select a run to generate a complete notebook prompt.';
     return;
   }
-  const events=dataset.events.filter(e=>e.event_properties.demo_run_id===runId);
-  $('notebook-status').textContent=events.length?'Using this locally prepared run. Send its events before asking Global Agent to analyse it.':'Using an existing run. Global Agent will discover its event dates and query its counts; no new data needs to be sent.';
-  $('notebook-prompt').value=notebookPrompt({project:config.project,runId,events,expected:events.length?counts(events):undefined});
+  $('notebook-status').textContent=record?`${record.eventCount} events accepted${record.sentAt?' on '+new Date(record.sentAt).toLocaleString('en-AU'):''}. Saved in this browser${config.key?' for the connected project':'; confirm the matching project in Amplitude'}.`:events.length?'Preview of prepared data. Send its events before asking Global Agent to analyse it.':'Using an existing run. Global Agent will discover its event dates and query its counts; no new data needs to be sent.';
+  $('notebook-prompt').value=notebookPrompt({project:record?.project || config.project,runId,events,expected:context.expected,runMetadata:record});
 }
-function renderConnection(){const connected=!!config.key;$('connection-badge').innerHTML=`<i></i> ${connected?'Key saved · '+escape(config.region):'Preview mode'}`;$('connection-badge').classList.toggle('connected',connected);$('connect-open').textContent=connected?'Project settings ↗':'Connect project ↗';$('destination').textContent=connected?`Destination: ${config.region} data region${config.project?' · '+config.project:''}. API key saved; connection is verified only when events are accepted.`:'Connect a project API key to send.';$('project-name').value=config.project||'';renderDataset();}
+function renderConnection(){const connected=!!config.key;$('connection-badge').innerHTML=`<i></i> ${connected?'Key saved · '+escape(config.region):'Preview mode'}`;$('connection-badge').classList.toggle('connected',connected);$('connect-open').textContent=connected?'Project settings ↗':'Connect project ↗';$('destination').textContent=connected?`Destination: ${config.region} data region${config.project?' · '+config.project:''}. API key saved; connection is verified only when events are accepted.`:'Connect a project API key to send.';$('project-name').value=config.project||'';renderDataset();refreshRunHistory();}
 async function sendDataset(){
   if(sending||!dataset.events.length||!config.key)return;
   sending=true;
   ['generate-data','use-journey','include-costs','visitor-count','connect-open'].forEach(id=>$(id).disabled=true);
   const frozen={key:config.key,region:config.region};
   try{
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(frozen.region+':'+frozen.key));
-    const destination=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+    const destination=await destinationHash(frozen.region,frozen.key);
     const accepted=new Set(dataset.accepted[destination]||[]);
     dataset.status=`Sending to ${frozen.region}… ${accepted.size}/${dataset.events.length} already accepted.`;renderDataset();
     await sendEvents({apiKey:frozen.key,region:frozen.region,events:dataset.events,accepted,onProgress:(n,total)=>{dataset.accepted[destination]=[...accepted];dataset.status=`${n}/${total} events accepted by Amplitude (${frozen.region}).`;persistDataset();$('send-status').textContent=dataset.status;}});
+    sentRuns=rememberRun(sentRuns,completedRunRecord(dataset,destination,{region:frozen.region,project:config.project,sentAt:Date.now()}));
+    save('campaignlab.sentRuns',sentRuns);
+    notebookSelection='latest';save('campaignlab.notebookSelection',notebookSelection);
+    activeDestination=destination;historyReady=true;renderRunChoices();
     dataset.status=`All ${dataset.events.length} events accepted by Amplitude (${frozen.region}). Ingestion acceptance is not chart verification; allow processing time and check Data → Events with run ${dataset.runId}.`;
     toast('Events accepted. Open the reporting guide to configure your charts.');
   }catch(error){dataset.status=error.message;toast(error.message);}
@@ -160,5 +211,6 @@ $('connection-form').addEventListener('submit',event=>{event.preventDefault();co
 $('forget-key').addEventListener('click',()=>{config.key='';save('campaignlab.connection.v2',config);$('api-key').value='';$('connect-dialog').close();renderConnection();toast('Project key removed from this browser.');});
 $('project-name').addEventListener('input',()=>{config.project=$('project-name').value.slice(0,200);save('campaignlab.connection.v2',config);renderPrompt();});
 $('existing-run-id').addEventListener('input',()=>{save('campaignlab.notebookRun',$('existing-run-id').value.trim());renderPrompt();});
+$('notebook-run-choice').addEventListener('change',()=>{notebookSelection=$('notebook-run-choice').value;save('campaignlab.notebookSelection',notebookSelection);$('manual-run-fields').hidden=notebookSelection!=='manual';renderPrompt();});
 $('copy-prompt').addEventListener('click',()=>{if(isValidRunId(currentNotebookRun()))copy($('notebook-prompt').value);});$('download-prompt').addEventListener('click',()=>{if(isValidRunId(currentNotebookRun()))download(`notebook-${currentNotebookRun()}.txt`,$('notebook-prompt').value,'text/plain');});
 initJourney();renderCredit();renderConnection();route();

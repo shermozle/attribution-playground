@@ -100,3 +100,12 @@ test('an existing run never inherits another dataset dates or expected counts',(
  assert.match(text,/Expected counts are not supplied/);
  assert.doesNotMatch(text,/999|2026-11-13T/);
 });
+test('notebook prompt specifies a compact visual tour and keeps setup out of the notebook',()=>{
+ const text=notebookPrompt({runId:'visual-run'});
+ assert.match(text,/Maximum 220 words/);
+ assert.match(text,/Maximum six chart\/table blocks plus one KPI row/);
+ assert.match(text,/use only these four sections/);
+ assert.match(text,/manual setup and tool limitations in your final CHAT response/);
+ assert.match(text,/do not embed the result as if it worked/);
+ assert.match(text,/Do not use raw string-contains/);
+});

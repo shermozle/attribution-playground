@@ -22,37 +22,46 @@ export const RECIPES = [
 
 export const isValidRunId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value);
 
-export function notebookPrompt({ project, runId, events = [], expected }) {
+export function notebookPrompt({ project, runId, events = [], expected, runMetadata }) {
   if (!isValidRunId(runId)) throw new Error('Prepare a dataset or enter an existing run ID before creating a prompt.');
   const runEvents = events.filter(e => e.event_properties?.demo_run_id === runId);
-  const dates = runEvents.length
-    ? `The locally prepared event-time range is ${new Date(Math.min(...runEvents.map(e=>e.time))).toISOString()} to ${new Date(Math.max(...runEvents.map(e=>e.time))).toISOString()}. Verify ingestion and include this entire range in the project timezone.`
-    : 'Event times are not available in this browser. Discover the earliest and latest event timestamps for this exact run across available history, then set chart dates to cover the entire run in the project timezone. Do not substitute ingestion time for event time. If exact timestamp discovery is unavailable, use a broad available-history range with the exact run filter and document the limitation; do not block notebook creation just because local dates are absent.';
-  const expectations = runEvents.length && expected
-    ? `Local expected outcome counts for this prepared dataset (14-day, Most recent, item-level; these are predictions to verify, not Amplitude query results): ${JSON.stringify(expected)}.`
-    : 'Expected counts are not supplied for this existing run. Query and report the actual results; missing local expectations do not mean zero events and are not a blocker. Do not infer counts from another run.';
-  return `Create a NEW Amplitude notebook named "Campaign attribution lab — ${runId}" ${project?.trim() ? `in project ${JSON.stringify(project.trim())}` : 'in the currently selected Amplitude project'}. Use only demo_run_id = "${runId}". This exact run is explicitly selected; do not ask for confirmation merely because it was entered manually. Verify project selection only if it is genuinely ambiguous. ${dates} These are synthetic demonstration events, not real business results.
+  const metadata = runMetadata?.runId === runId ? runMetadata : null;
+  const start = runEvents.length ? Math.min(...runEvents.map(e=>e.time)) : metadata?.start;
+  const end = runEvents.length ? Math.max(...runEvents.map(e=>e.time)) : metadata?.end;
+  const dates = Number.isFinite(start) && Number.isFinite(end)
+    ? `Event-time range: ${new Date(start).toISOString()} to ${new Date(end).toISOString()}. Include the entire range in the project timezone and verify data is present.`
+    : 'Discover the earliest and latest event timestamps for this exact run across available history. Do not substitute ingestion time for event time. If timestamp discovery is unavailable, use available history plus the exact run filter; missing local dates are not a blocker.';
+  const expectations = (runEvents.length || metadata) && expected
+    ? `Private validation only: local predictions to verify (not queried results) are ${JSON.stringify(expected)} under 14-day, Most recent, item-bound rules. Do not print this checklist in the notebook.`
+    : 'Expected counts are not supplied. Query actual results; missing expectations do not mean zero and are not a blocker.';
+  return `Create a NEW visual demo notebook named "Campaign lab — ${runId}" ${project?.trim() ? `in project ${JSON.stringify(project.trim())}` : 'in the currently selected Amplitude project'}. Every chart must filter demo_run_id = "${runId}". This run is explicitly selected. ${dates}
 
-First inspect the available schema and data, then build and save supported charts and embed them in a teaching notebook. Do not invent chart links, persisted properties or query results. If a tool cannot configure something, add an explicit manual setup instruction and leave that section marked incomplete.
+READER EXPERIENCE — treat this as a five-minute visual tour, not an implementation manual.
+- Visible title: "From campaigns to conversions". One short subtitle: "Explore what gets remembered, what expires, and what gets credit."
+- Maximum 220 words of narrative in the ENTIRE notebook, excluding chart labels. Each takeaway is one sentence, at most 15 words. Use short, friendly question headings.
+- Charts come before explanation. Maximum six chart/table blocks plus one KPI row. Use side-by-side layouts where supported. Prefer aggregated bars, funnels and compact comparisons over time-series charts for these backdated fixtures.
+- No raw JSON, schema dumps, numbered setup instructions, compatibility lists, build-status preamble, repeated run IDs, acceptance checklist or documentation appendix in the notebook.
+- Keep implementation notes, manual setup and tool limitations in your final CHAT response, not in notebook prose. When a visual is blocked, use one short "Setup needed" caption in its place and report the exact fix in chat. Never replace it with paragraphs or an unverified approximation.
 
-Event design:
-- Campaign Landed: event properties utm_source, utm_medium, utm_campaign, utm_content, utm_term, external_campaign_code.
-- Page Viewed, Product Viewed, Product Added, Purchase. Purchase has numeric revenue in AUD and products[] with item_id, item_name, category, price, quantity. Use PROPSUM(revenue), not built-in revenue unless verified.
-- Promotion Impression: one event per rail exposure, products[] with item_id, campaign_code, impression_campaign, position; rail_id and impression_id.
-- Promotion Clicked: the same schema with one product; click_campaign instead of impression_campaign. Campaign code is only raw event context on impression/click, absent on Purchase.
-- User properties: customer_type, membership_tier, initial_utm_campaign, current utm_* values, last_clicked_promo. Current profile values are not item-bound and do not implement a 14-day TTL.
-- Optional Daily Ad Metrics: synthetic ad aggregates with matching utm_* in user and event properties, ad_metrics.cost, ad_metrics.clicks, ad_metrics.impressions, currency AUD. These have separate device IDs and must be excluded from behavioral funnels. Check whether these were actually sent.
+LAYOUT (use only these four sections):
+Start with three queried KPI values: visitors (unique users on Campaign Landed), orders (Purchase totals), revenue (sum of Purchase.revenue, AUD). Add one short strip: "Profile = user state | Persistence = eligible context | Attribution = conversion credit".
+1. "Which campaign gets credit?" One compact comparison of Purchase revenue by campaign under First Touch, Last Touch, Linear and Participation, 14-day lookback. Beside it, one small campaign/spend/ROAS table if supported; cost must remain un-attributed. Show the participation over-count caveat in one sentence. No user-property chart labelled as attribution.
+2. "Which offers get clicks?" Two small ordered impression → click funnels, one for PHONE-01 and one for BUDS-02, 1-day window. Short product names and conversion percentages; one-line takeaway. These measure visitor CTR.
+3. "What happens without a click?" One stacked bar of purchased ITEM counts: click-through, view-through only, unattributed. Use verified product matches and 14-day eligibility. A plain impression → purchase funnel is not view-through-only.
+4. "What stays with the purchase?" One small comparison table of actual examples: two-item basket, different product, 15-day return. Columns: bought item, user-property value, item-bound persisted value. Show how user state differs from eligible item context. Missing setup gets a short caption, never invented values.
+End with only: "Synthetic data. Attribution shows association, not incremental lift." Put run ID and date range in a single small metadata line.
 
-Notebook sections:
-1. The three concepts: profile state vs query-time context vs metric credit. Show raw example payloads; persisted values are not sent by this site.
-2. Campaign Landed volumes by utm_campaign. Purchase revenue in a Data Table with outermost event-property utm_campaign group-by; compare first, last, linear and participation, 14-day lookback. A separate current user-property UTM comparison. Label all model/metric compatibility limitations. Do not sum unique users across campaign rows.
-3. Cost and return: explain Google/Facebook source connectors, exact UTM matching, daily import delay, date/timezone/currency alignment. Compare attributed revenue with un-attributed cost. CPA here is cost/purchases, not CAC. If synthetic Daily Ad Metrics is absent, provide the recipe without fabricated values.
-4. Rail CTR: PHONE-01 impression→click ordered funnel, 1 day, filter the same item on BOTH events. Explain unique-visitor CTR versus event/exposure CTR. Use same-object filters for sibling campaign and item fields. Repeat for BUDS-02 if supported.
-5. Configure/verify object splitting (products, Array/Any; new ingestion only). Then two Most recent / 14-day persisted properties, item-bound to products.item_id: "Last clicked promotion · 14d" sourced from products.click_campaign and linked only by Promotion Clicked; "Last viewed promotion · 14d" from products.impression_campaign linked only by Promotion Impression. If tools cannot configure these, document exact manual steps and wait for completion before using them in charts.
-6. Click-through and view-through-only purchases per product: exposure before purchase, same item, 14-day eligibility, click priority. For view-through-only exclude a matching click between exposure and purchase, not a lifetime exclusion. If exact temporal item logic is unsupported, label that limitation and describe event-stream/warehouse validation. Never claim a simple impression→purchase funnel excludes clicks.
-7. Acceptance examples: two-item order retains separate sources; PHONE/BUDS exposure followed by CASE purchase is unattributed; a purchase 15 days later has no 14-day persisted source even when last_clicked_promo remains on its profile. Compare Session/14-day/30-day persistence separately from attribution lookback. Avoid whole-order revenue duplication in item breakdowns.
-8. Explain that attribution measures association and a holdout experiment is needed for incrementality. Finish with a presenter checklist and source links.
-
+BUILDER NOTES — use these to build and validate; do not reproduce them in the notebook:
+- Inspect schema, existing charts and supported tools first. Save charts, read back their definitions and query them before embedding. Ensure attribution model, lookback, run filters and item filters survive saving. If a tool drops a setting, do not embed the result as if it worked. Do not use raw string-contains as a substitute for same-item semantics.
+- Campaign Landed carries event utm_campaign and other utm_* fields. Raw Purchase has no campaign code. Current user-property utm_campaign and last_clicked_promo are profile state, not attribution. Purchase.revenue is order-level AUD; use property sum, not built-in Revenue unless verified.
+- Daily Ad Metrics carries ad_metrics.cost, clicks, impressions and matching utm_* (user and event properties). Check presence; these synthetic aggregates have separate identities and never belong in behavioral funnels. ROAS is attributed revenue / un-attributed cost; don't present Participation ROAS as additive return. CPA is cost / purchases, not CAC.
+- Promotion Impression contains products[] with item_id, campaign_code, impression_campaign and position. Promotion Clicked has one product with click_campaign. Purchase.products[] has item_id, price and quantity. Require object splitting and same-object filters. Do not multiply order revenue by the number of products; item revenue = price × quantity.
+- Two persisted properties: Most recent / 14 days, item-bound to products.item_id. "Last clicked promotion · 14d": products.click_campaign, linking event Promotion Clicked. "Last viewed promotion · 14d": products.impression_campaign, linking event Promotion Impression. Verify these exist and work before reporting them. Splitting only affects new ingestion; old unsplit data may need a fresh run. Put any required manual steps in chat.
+- Outcome rule for this lab: a same-item click within 14 days of purchase takes priority; otherwise an eligible same-item impression yields view-through only; otherwise unattributed. All signals precede purchase. Validate actual event sequences; do not use a lifetime never-clicked cohort or claim causality. If exact item logic is unsupported, leave that visual marked Setup needed.
+- demo_scenario: click, view, mismatch, multi, expired, abandon. The abandon scenario has no Purchase; it remains in visitor denominators. Verify two bought items retain separate sources; CASE-04 gets no PHONE/BUDS credit; a 15-day return expires under 14-day persistence while its profile can retain the click.
 ${expectations}
-Data source marker: demo_source = attribution-playground. Filter demo_scenario where helpful. Source documentation: ${SOURCES.map(s=>s[1]).join('\n')}`;
+
+Before finishing, review the saved notebook: no more than 220 narrative words, four question headings, charts before prose, no fabricated results. Return the notebook URL plus a short separate list of blockers in chat. Do not append the blocker list to the notebook.
+References for the builder: ${SOURCES.slice(0,4).map(s=>s[1]).join(' ')}.
+`;
 }
