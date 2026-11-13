@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive Amplitude lab for campaign attribution, user properties and persisted properties.">
+  <meta name="referrer" content="no-referrer">
+  <title>Campaign lab · Attribution playground</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="#journey"><span class="brand-mark">a<span>↗</span></span><span>campaign<span class="brand-light">lab</span><small>AMPLITUDE × TELSTRA DEMO</small></span></a>
+    <div class="top-actions"><span id="connection-badge" class="badge"><i></i> Preview mode</span><button class="secondary small" id="connect-open">Connect project <span>↗</span></button></div>
+  </header>
+  <main id="main">
+    <section class="intro">
+      <div><div class="eyebrow">FROM FIRST IMPRESSION TO FINAL PURCHASE</div><h1>Same journey.<br><span>Different answers.</span></h1><p>See what happened, what stays with the user, and what gets credit.<br class="desktop"> A hands-on campaign tracking lab, built for Telstra.</p></div>
+      <div class="intro-map" aria-label="Journey from campaign to promotion to purchase"><div><span class="map-icon">↗</span><small>ACQUIRE</small><strong>Campaign</strong></div><span class="map-line"></span><div><span class="map-icon">◫</span><small>DISCOVER</small><strong>Promotion</strong></div><span class="map-line"></span><div><span class="map-icon">✓</span><small>CONVERT</small><strong>Purchase</strong></div><p>One event stream. Three ways to understand it.</p></div>
+    </section>
+    <nav class="tabs" aria-label="Lab sections">
+      <a href="#journey" data-tab="journey">01 <span>Journey lab</span></a>
+      <a href="#properties" data-tab="properties">02 <span>Property lab</span></a>
+      <a href="#reporting" data-tab="reporting">03 <span>Reporting guide</span></a>
+      <a href="#data" data-tab="data">04 <span>Data studio</span></a>
+      <a href="#notebook" data-tab="notebook">05 <span>Build a notebook</span></a>
+    </nav>
+
+    <section id="journey" class="panel">
+      <div class="section-heading"><div><div class="eyebrow">PLAY THE CUSTOMER</div><h2>A little shopping. A lot of context.</h2></div><span class="pill">Fictional products · AUD</span></div>
+      <div class="journey-layout">
+        <aside class="journey-controls card">
+          <label for="scenario">Choose a story</label><select id="scenario"></select>
+          <label for="entry-source" class="entry-label">First campaign touch</label><select id="entry-source"><option value="google">Google · paid search</option><option value="facebook">Facebook · paid social</option><option value="email">Newsletter · email</option><option value="url" hidden>UTMs from this URL</option></select><button id="copy-campaign-url" class="text-button">Copy tagged landing URL ↗</button>
+          <p id="scenario-description" class="muted"></p>
+          <div class="question" id="scenario-question"></div>
+          <div class="step-count">JOURNEY PROGRESS <strong id="step-count"></strong></div><div class="progress-track"><span id="step-progress"></span></div>
+          <button id="next-step" class="primary full">Start journey →</button>
+          <button id="finish-journey" class="secondary full">Play entire journey</button>
+          <button id="restart-journey" class="text-button full">Start a fresh visitor ↻</button>
+          <div class="micro-note">Actions prepare events locally. Send them to your project from Data studio.</div>
+        </aside>
+        <div class="storefront card">
+          <div class="store-nav"><strong><span class="store-logo">t.</span> the demo store</strong><span>Mobiles&nbsp;&nbsp; Internet&nbsp;&nbsp; Accessories</span><span id="cart-count" class="cart">Bag 0</span></div>
+          <div class="store-hero"><div><span class="eyebrow">YOUR NEXT EVERYDAY ESSENTIAL</span><h3>Small upgrades.<br>Big possibilities.</h3><p>Explore a few favourites for life on the go.</p></div><div class="orbit-art" aria-hidden="true"><div class="orbit-ring"></div><div class="phone"><span></span><i></i></div><div class="art-dot"></div></div></div>
+          <div class="rail-heading"><h4>Made for your everyday</h4><span>THE PROMOTION RAIL <b>01 — 03</b></span></div>
+          <div class="product-rail" id="products"></div>
+          <div class="store-status" id="store-status" aria-live="polite">Start a journey to arrive from a campaign.</div>
+        </div>
+      </div>
+      <div class="stream card"><div class="stream-heading"><div><span class="status-dot"></span><h3>Event stream</h3><span id="event-count" class="muted">0 events</span></div><button id="export-journey" class="text-button">Download JSON ↓</button></div><div class="stream-layout"><div id="event-list" class="event-list"><p class="empty">Your journey will appear here.</p></div><div class="payload"><div class="payload-heading">RAW EVENT PAYLOAD <span>Nothing hidden. Nothing inferred.</span></div><pre id="event-payload">Start the journey to inspect its first event.</pre></div></div></div>
+    </section>
+
+    <section id="properties" class="panel" hidden>
+      <div class="section-heading"><div><div class="eyebrow">SEPARATE THE THREE QUESTIONS</div><h2>State. Context. Credit.</h2></div><span class="pill">Local teaching simulation</span></div>
+      <div class="concept-grid"><article class="concept card"><span class="concept-number">01 / USER PROPERTY</span><h3>Who is this user now?</h3><p>Profile state captured on events. A last-click field can remain set indefinitely, until you change or clear it.</p><code>last_clicked_promo</code></article><article class="concept card blue"><span class="concept-number">02 / PERSISTED PROPERTY</span><h3>Which context still applies?</h3><p>Event context evaluated at query time, with allocation, expiry and optional item binding.</p><code>Last clicked promotion · 14d</code></article><article class="concept card"><span class="concept-number">03 / ATTRIBUTION</span><h3>Who receives the credit?</h3><p>A metric-level rule dividing conversion credit among eligible property values in a lookback window.</p><code>Purchase revenue → Linear</code></article></div>
+      <div class="card lab-card"><div class="lab-heading"><div><h3>Look at the purchase</h3><p class="muted">Play a full journey, or select a sample below. Values here are calculated locally.</p></div><div class="inline-fields"><label>Story<select id="property-scenario"></select></label><label>Allocation<select id="allocation"><option>Most recent</option><option>Original</option><option>First known</option><option>Last known</option></select></label><label>Expires after<select id="expiration"><option value="session">Session</option><option value="14d" selected>14 days</option><option value="30d">30 days</option></select></label></div></div><div id="property-results"></div><div id="property-explanation" class="callout"></div></div>
+      <div class="card lab-card"><div class="lab-heading"><div><h3>Change the credit, keep the journey</h3><p class="muted">Illustrative $1,200 conversion · Google → Facebook → Email · all touches inside 14 days</p></div><label>Attribution model<select id="attribution-model"><option>First touch</option><option>Last touch</option><option selected>Linear</option><option>U-shaped</option><option>Participation</option></select></label></div><div id="credit-bars"></div><p id="credit-note" class="micro-note"></p></div>
+      <p class="source-line">These local examples do not reproduce the Amplitude query engine. Configure and verify the real properties in your project. <a href="https://amplitude.com/docs/data/persisted-properties" target="_blank" rel="noreferrer">Read the persistence documentation ↗</a></p>
+    </section>
+
+    <section id="reporting" class="panel" hidden><div class="section-heading"><div><div class="eyebrow">TAKE IT INTO AMPLITUDE</div><h2>From events to answers.</h2></div><button id="guide-download" class="secondary">Download walkthrough ↓</button></div><div class="report-layout"><div id="recipes"></div><aside><div class="card report-note"><span class="eyebrow">THE DESIGN BRIEF</span><h3>Start with the questions.</h3><p>One impression for a visible rail. One selected item on a click. Product IDs that survive all the way to purchase.</p><p>Compare the familiar two-week click window with item-specific exposure and purchase reporting.</p><hr><strong>Three useful checks</strong><ul><li>Seen A, bought B → no match.</li><li>Two purchased items → two sources.</li><li>Day 15 return → expired context.</li></ul></div><div class="card report-note"><h3>Source documentation</h3><div id="source-links"></div><p class="micro-note">Reviewed 13 November 2026. Feature availability and chart controls depend on your project and permissions.</p></div></aside></div></section>
+
+    <section id="data" class="panel" hidden>
+      <div class="section-heading"><div><div class="eyebrow">MAKE THE REPORTS REAL</div><h2>Your project. A repeatable dataset.</h2></div><span class="pill" id="dataset-badge">No dataset prepared</span></div>
+      <div class="data-layout"><div class="card lab-card"><h3>Prepare sample journeys</h3><p class="muted">Six scenarios, including non-converters and negative controls. All visitor IDs are synthetic. Preparing data does not send it.</p><label for="visitor-count">Synthetic visitors</label><select id="visitor-count"><option value="6">6 · one of each story</option><option value="48" selected>48 · recommended for a walkthrough</option><option value="120">120 · a fuller set of charts</option><option value="240">240 · larger demonstration</option></select><label class="check"><input type="checkbox" id="include-costs" checked> Include synthetic daily ad costs</label><div class="button-row"><button class="primary" id="generate-data">Prepare sample data</button><button class="secondary" id="use-journey">Use current journey</button></div><p class="micro-note">Purchases are dated yesterday; earlier touches include a 15-day return. Cost records are campaign-day aggregates in AUD, not a live Google or Facebook import.</p></div>
+      <div class="card lab-card"><h3>Send to Amplitude</h3><p class="muted" id="destination">Connect a project API key to send.</p><div id="dataset-stats" class="dataset-stats"></div><div class="button-row"><button id="send-data" class="primary" disabled>Send prepared events ↗</button><button id="export-data" class="secondary" disabled>Export JSON ↓</button></div><p id="send-status" role="status" class="micro-note">No events have been sent.</p><div class="callout small-callout">First send a small journey to expose the schema. Enable <strong>products object splitting</strong> in Amplitude, then prepare and send a fresh run for item-level reports.</div></div></div>
+      <div class="card lab-card"><div class="lab-heading"><div><h3>Expected outcomes</h3><p class="muted">Local predictions for 14-day, Most recent, item-bound persistence. Verify against Amplitude after configuring properties.</p></div><button class="text-button" id="open-notebook">Create the walkthrough prompt →</button></div><div id="expected-results" class="empty">Prepare a dataset to see its acceptance checks.</div></div>
+      <div class="card lab-card"><h3>Inspect the prepared payloads</h3><p class="muted">API keys are excluded from exports and this inspector.</p><details><summary>Show event JSON</summary><pre id="dataset-json">[]</pre></details></div>
+    </section>
+
+    <section id="notebook" class="panel" hidden><div class="section-heading"><div><div class="eyebrow">LET THE AGENT BE YOUR CO-PRESENTER</div><h2>Turn this run into a notebook.</h2></div><span class="pill">Copy → paste → build</span></div><div class="notebook-layout"><div class="card lab-card"><div class="notebook-icon">✳</div><h3>Your guided analysis, in your project.</h3><p>Prepare and send a dataset. Then copy this prompt into Amplitude’s <strong>Global Agent</strong> and select the same project.</p><p>It asks the agent to inspect the schema, create supported charts and assemble a teaching notebook. Manual setup is called out when a tool can’t do it.</p><label for="project-name">Project name or ID for the prompt</label><input id="project-name" placeholder="e.g. Telstra campaign demo"><div class="button-row"><button id="copy-prompt" class="primary">Copy Global Agent prompt ↗</button><button id="download-prompt" class="secondary">Download .txt</button></div><p class="micro-note">The ingestion API key cannot create notebooks. Global Agent uses your signed-in Amplitude permissions. The key is never included in this prompt.</p><a href="https://amplitude.com/docs/analytics/notebooks" target="_blank" rel="noreferrer">About notebooks and Global Agent ↗</a></div><div class="card prompt-card"><div class="payload-heading">YOUR RUN-SPECIFIC PROMPT <span id="prompt-run"></span></div><textarea id="notebook-prompt" aria-label="Global Agent notebook prompt" readonly></textarea></div></div></section>
+  </main>
+  <footer><span><strong>campaignlab</strong> · An independent demonstration for Telstra</span><span>Fictional products. Synthetic data. Real questions.</span></footer>
+  <dialog id="connect-dialog"><form id="connection-form"><div class="dialog-heading"><h2>Connect your project</h2><button type="button" id="connect-close" class="icon-button" aria-label="Close connection settings">×</button></div><p>Use your Amplitude <strong>project API key</strong>. It is saved in this browser’s localStorage and sent only to the selected Amplitude ingestion endpoint.</p><label for="api-key">Project API key</label><input id="api-key" type="password" autocomplete="off" placeholder="Paste project API key" spellcheck="false"><label for="region">Project data region</label><select id="region"><option value="US">Default / US</option><option value="EU">EU</option></select><p class="micro-note">No secret key, ad account token or admin credential is needed. Use a demo project: submitted events become part of its analytics data.</p><div class="button-row"><button type="submit" class="primary">Save connection</button><button type="button" id="forget-key" class="secondary">Forget key</button></div></form></dialog>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>
